@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: smartrack-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: smartrack_db
+      POSTGRES_USER: smartrack
+      POSTGRES_PASSWORD: secret123
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartrack -d smartrack_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: smartrack-backend
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - PROJECT_NAME=IoT Smart Rack Inventory Management System
+      - VERSION=1.0.0
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql://smartrack:secret123@postgres:5432/smartrack_db
+      - JWT_SECRET=smartrack_super_secure_jwt_secret_key_change_in_production_2026
+      - DEVICE_API_KEY=SR-IOT-DEVICE-KEY-98421-ESP8266-A1
+      - RFID_DEBOUNCE_SECONDS=3.0
+      - DEVICE_OFFLINE_TIMEOUT_SECONDS=60
+      - CRITICAL_STOCK_DEFAULT=2
+    ports:
+      - "8000:8000"
+    command: >
+      sh -c "python seed.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: smartrack-frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "3000:80"
+
+volumes:
+  pgdata:
+    driver: local
